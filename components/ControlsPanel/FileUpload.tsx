@@ -4,10 +4,11 @@ import { validateSchema } from '../../utils/schemaValidator';
 import { RawChessData } from '../../types';
 
 interface FileUploadProps {
-  onFileUpload: (data: RawChessData) => void;
+  onFileUpload: (data: RawChessData, fileName: string) => void;
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
   disabled?: boolean;
+  currentDataSourceName: string | null; // New prop
 }
 
 const UploadIcon: React.FC<{ className?: string }> = ({ className }) => (
@@ -17,14 +18,13 @@ const UploadIcon: React.FC<{ className?: string }> = ({ className }) => (
 );
 
 
-const FileUpload: React.FC<FileUploadProps> = ({ onFileUpload, setLoading, setError, disabled }) => {
-  const [fileName, setFileName] = React.useState<string | null>(null);
+const FileUpload: React.FC<FileUploadProps> = ({ onFileUpload, setLoading, setError, disabled, currentDataSourceName }) => {
 
   const handleFileChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     if (disabled) return;
     const file = event.target.files?.[0];
     if (file) {
-      setFileName(file.name);
+      // No longer sets local fileName state
       setLoading(true);
       setError(null);
       const reader = new FileReader();
@@ -33,16 +33,16 @@ const FileUpload: React.FC<FileUploadProps> = ({ onFileUpload, setLoading, setEr
           const text = e.target?.result as string;
           const validationResult = validateSchema(text);
           if (validationResult.isValid && validationResult.data) {
-            onFileUpload(validationResult.data);
+            onFileUpload(validationResult.data, file.name); // Pass file.name
           } else {
             setError(validationResult.error || 'Unknown validation error.');
             console.error("Validation Error:", validationResult.error);
-            setFileName(null); 
+            onFileUpload(null as any, ''); // Signal error or reset in App.tsx if needed
           }
         } catch (err) {
           setError(`Error processing file: ${(err as Error).message}`);
           console.error("File Processing Error:", err);
-          setFileName(null); 
+          onFileUpload(null as any, ''); // Signal error
         } finally {
           setLoading(false);
         }
@@ -50,14 +50,12 @@ const FileUpload: React.FC<FileUploadProps> = ({ onFileUpload, setLoading, setEr
       reader.onerror = () => {
         setError('Failed to read file.');
         setLoading(false);
-        setFileName(null); 
+        onFileUpload(null as any, ''); // Signal error
       };
       reader.readAsText(file);
-    } else {
-      setFileName(null);
     }
     if (event.target) {
-        event.target.value = '';
+        event.target.value = ''; // Reset file input
     }
   }, [onFileUpload, setLoading, setError, disabled]);
 
@@ -66,10 +64,10 @@ const FileUpload: React.FC<FileUploadProps> = ({ onFileUpload, setLoading, setEr
       <label
         htmlFor="file-upload-header"
         className={`flex items-center px-3 py-1.5 text-xs sm:text-sm font-medium text-white bg-sky-500 hover:bg-sky-600 rounded-md border border-sky-700 shadow-sm transition-colors duration-150 focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-offset-slate-800 focus-within:ring-sky-400 ${disabled ? 'pointer-events-none' : 'cursor-pointer'}`}
-        title={fileName ? "Change the loaded chess game data file (JSON format)" : "Load a chess game data file (JSON format) to visualize the network"}
+        title={currentDataSourceName ? `Change data source (currently: ${currentDataSourceName})` : "Load a chess game data file (JSON format) to visualize the network"}
       >
         <UploadIcon className="mr-1.5 h-4 w-4 text-sky-100 flex-shrink-0" />
-        <span>{fileName ? 'Change Data' : 'Load Game Data'}</span>
+        <span>{currentDataSourceName ? 'Change Data' : 'Load Game Data'}</span>
         <input
           id="file-upload-header"
           type="file"
@@ -80,9 +78,9 @@ const FileUpload: React.FC<FileUploadProps> = ({ onFileUpload, setLoading, setEr
           disabled={disabled}
         />
       </label>
-      {fileName && (
-         <p id="file-upload-status" className="text-xs text-slate-300 truncate max-w-[100px] sm:max-w-[150px]" title={`Currently loaded file: ${fileName}`}>
-          {fileName}
+      {currentDataSourceName && (
+         <p id="file-upload-status" className="text-xs text-slate-300 truncate max-w-[100px] sm:max-w-[150px]" title={`Currently loaded: ${currentDataSourceName}`}>
+          {currentDataSourceName}
         </p>
       )}
     </div>

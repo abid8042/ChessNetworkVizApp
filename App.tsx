@@ -12,6 +12,8 @@ import {
 import { INITIAL_FILTERS_STATE, INITIAL_FILTER_VALUE_RANGE } from './constants';
 import { DEFAULT_LAYOUT_PARAMS } from './src/constants'; // Import default layout params
 import { processMoveData, applyFiltersAndSort, getCapturedPieces } from './utils/dataProcessor';
+import { validateSchema } from './utils/schemaValidator'; // Import validateSchema
+
 
 import FileUpload from './components/ControlsPanel/FileUpload';
 import MoveSelector from './components/ControlsPanel/MoveSelector';
@@ -41,6 +43,15 @@ const RefreshIcon: React.FC<{ className?: string }> = ({ className }) => (
     <svg className={`w-4 h-4 ${className || ''}`} viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
         <path fillRule="evenodd" d="M15.322 10.707a5.001 5.001 0 00-7.59-4.152L6.455 7.83A3.001 3.001 0 0111.95 9.57l.975 1.013a1 1 0 01-1.438 1.392l-1.303-.782a3.001 3.001 0 01-3.583-2.508L2.85 5.505a1 1 0 011.04-1.634l2.692.976A5.001 5.001 0 0015.322 10.707zm-.827 3.289a1 1 0 01-1.04 1.634l-2.691-.976a5.001 5.001 0 00-7.772-5.638L4.678 9.293a1 1 0 011.438-1.392l1.303.782a3.001 3.001 0 013.583 2.508l3.755 2.176a1 1 0 01-.696 1.81z" clipRule="evenodd" />
     </svg>
+);
+
+const DatabaseIcon: React.FC<{ className?: string }> = ({ className }) => (
+  <svg className={`w-5 h-5 ${className || ''}`} viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+    <path fillRule="evenodd" d="M3 5a2 2 0 012-2h10a2 2 0 012 2v2.28a1 1 0 01-.4.8L12 10.4V15a1 1 0 01-1 1H9a1 1 0 01-1-1v-4.6L3.4 8.08A1 1 0 013 7.28V5zm1 0v1.586l4.293 2.146a.5.5 0 00.414 0L13 6.586V5H4zm10.293 8.293a1 1 0 011.414 0l.001.001.001.001a1.002 1.002 0 010 1.413l-.001.001a1.002 1.002 0 01-1.414 0L12 13.414l-2.293 2.293a1 1 0 01-1.414-1.414l2.293-2.293L9.172 10.5H10V8H8v2.5a.5.5 0 00.146.354l2.5 2.5zM10 11.414l-1.293-1.293a1 1 0 010-1.414L10 7.414l1.293 1.293a1 1 0 010 1.414L10 11.414z" clipRule="evenodd" />
+    {/* Simplified Database Icon Path:
+    <path d="M3 5a2 2 0 012-2h10a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2V5zm2 0v2h10V5H5zm0 4v2h10V9H5zm0 4v2h10v-2H5z" />
+    */}
+  </svg>
 );
 
 
@@ -88,7 +99,7 @@ const App: React.FC = () => {
   const [currentLayout, setCurrentLayout] = useState<LayoutType>('force-directed');
   const [currentGraphScope, setCurrentGraphScope] = useState<GraphScope>('combined');
   const [nodeColoringMetric, setNodeColoringMetric] = useState<NodeColoringMetricId>('default');
-  const [sequentialColorPalette, setSequentialColorPalette] = useState<SequentialColorPaletteId>('plasma'); // Changed default to plasma
+  const [sequentialColorPalette, setSequentialColorPalette] = useState<SequentialColorPaletteId>('plasma'); 
   const [layoutParams, setLayoutParams] = useState<LayoutParamsState>(DEFAULT_LAYOUT_PARAMS);
   
   const [filters, setFilters] = useState<FiltersState>(INITIAL_FILTERS_STATE);
@@ -98,6 +109,7 @@ const App: React.FC = () => {
   const [selectedNodeData, setSelectedNodeData] = useState<ProcessedNode | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [currentDataSourceName, setCurrentDataSourceName] = useState<string | null>(null); // New state
 
   const visualizationContainerRef = useRef<HTMLDivElement>(null);
   const svgDimensions = useResizeObserver(visualizationContainerRef);
@@ -170,15 +182,17 @@ const App: React.FC = () => {
     return getCapturedPieces(rawData.moves, currentMoveIndex);
   }, [rawData, currentMoveIndex]);
   
-  const handleFileUpload = useCallback((data: RawChessData) => {
+  const handleDataLoaded = useCallback((data: RawChessData | null, sourceName: string) => {
     setRawData(data);
+    setCurrentDataSourceName(sourceName);
     setCurrentMoveIndex(0); 
     setSelectedNodeData(null);
-    setError(null);
+    setError(null); // Clear previous errors
     setNodeColoringMetric('default'); 
-    setSequentialColorPalette('plasma'); // Reset to plasma on new file load
+    setSequentialColorPalette('plasma');
     setLayoutParams(DEFAULT_LAYOUT_PARAMS);
-    if (data.moves.length > 0) {
+
+    if (data && data.moves.length > 0) {
         const initialProcessedData = processMoveData(data.moves[0], currentGraphScope);
         const initialFilters = {...INITIAL_FILTERS_STATE};
         NODE_METRIC_KEYS.forEach(key => {
@@ -196,8 +210,40 @@ const App: React.FC = () => {
         setFilters(initialFilters);
     } else {
         setFilters(INITIAL_FILTERS_STATE);
+        if (!data && sourceName) { // If data is null but sourceName was attempted (e.g. failed load)
+            // Error will be set by the caller
+        } else if (!sourceName) { // Explicitly reset
+            setCurrentDataSourceName(null);
+        }
     }
   }, [currentGraphScope]);
+
+
+  const handleLoadSampleData = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const response = await fetch('sample-chess-data.json'); // Use simple relative path
+      if (!response.ok) {
+        throw new Error(`Failed to fetch sample data: ${response.status} ${response.statusText}`);
+      }
+      const text = await response.text();
+      const validationResult = validateSchema(text);
+      if (validationResult.isValid && validationResult.data) {
+        handleDataLoaded(validationResult.data, "Sample Game Data");
+      } else {
+        setError(validationResult.error || 'Unknown error validating sample data.');
+        handleDataLoaded(null, ''); // Clear data if sample load fails
+      }
+    } catch (err) {
+      setError(`Error loading sample data: ${(err as Error).message}`);
+      console.error("Sample Data Loading Error:", err);
+      handleDataLoaded(null, ''); // Clear data on error
+    } finally {
+      setIsLoading(false);
+    }
+  }, [handleDataLoaded]);
+
 
   const handleMoveChange = useCallback((newMoveIndex: number) => {
     const totalMoves = rawData?.moves.length || 0;
@@ -338,13 +384,23 @@ const App: React.FC = () => {
   return (
     <div className="flex flex-col h-screen bg-slate-200 text-slate-800 antialiased">
       <header className="bg-slate-800 text-slate-100 py-2.5 px-4 shadow-lg sticky top-0 z-20 border-b border-slate-700 flex items-center justify-between">
-        <div className="flex-none">
+        <div className="flex-none flex items-center space-x-2">
           <FileUpload 
-            onFileUpload={handleFileUpload} 
+            onFileUpload={handleDataLoaded} 
             setLoading={setIsLoading} 
             setError={setError} 
             disabled={isLoading}
+            currentDataSourceName={currentDataSourceName}
           />
+           <button
+            onClick={handleLoadSampleData}
+            disabled={isLoading}
+            className={`flex items-center px-3 py-1.5 text-xs sm:text-sm font-medium text-white bg-teal-500 hover:bg-teal-600 rounded-md border border-teal-700 shadow-sm transition-colors duration-150 focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-800 focus:ring-teal-400 ${isLoading ? 'opacity-60 cursor-not-allowed pointer-events-none' : 'cursor-pointer'}`}
+            title="Load a built-in sample chess game to explore dashboard features"
+          >
+            <DatabaseIcon className="mr-1.5 h-4 w-4 text-teal-100 flex-shrink-0" />
+            Load Sample
+          </button>
         </div>
         <div className="flex-grow text-center px-4">
           <h1 className="text-xl font-semibold text-sky-300 tracking-tight truncate" title="Chess Network Visualization Dashboard">Chess Network Visualization</h1>
@@ -355,7 +411,7 @@ const App: React.FC = () => {
             totalMoves={rawData?.moves.length || 0}
             currentMoveSAN={currentMoveData?.m || null}
             onMoveChange={handleMoveChange}
-            disabled={appIsDisabled}
+            disabled={appIsDisabled && !currentDataSourceName} // Disable if no data source
           />
         </div>
       </header>
@@ -389,8 +445,8 @@ const App: React.FC = () => {
               {isNodeColoringNumeric && (!appIsDisabled && processedGraphData) && (
                  <CollapsibleSection
                     title="Sequential Color Palette"
-                    defaultOpen={false} // Collapsed by default
-                    className="mt-2.5 !bg-slate-600/70" // Nested styling
+                    defaultOpen={false} 
+                    className="mt-2.5 !bg-slate-600/70" 
                     headerClassName="!p-2.5 text-xs"
                     contentClassName="!p-2"
                     tooltip="Configure the color palette for nodes when a continuous numeric coloring metric is selected. This section is active only for numeric metrics."
@@ -398,7 +454,7 @@ const App: React.FC = () => {
                     <SequentialColorPaletteSelector
                         currentPalette={sequentialColorPalette}
                         onPaletteChange={handleSequentialColorPaletteChange}
-                        disabled={appIsDisabled || !processedGraphData || !isNodeColoringNumeric} // Redundant here but good practice
+                        disabled={appIsDisabled || !processedGraphData || !isNodeColoringNumeric}
                     />
                 </CollapsibleSection>
               )}
@@ -493,9 +549,9 @@ const App: React.FC = () => {
         </aside>
 
         <main ref={visualizationContainerRef} className="flex-1 relative bg-white rounded-xl shadow-xl min-w-0 overflow-hidden border border-gray-300/50">
-          {appIsDisabled && !isLoading ? (
+          {(appIsDisabled && !isLoading && !currentDataSourceName) ? ( // Show initial prompt only if no data source attempted
             <div className="flex items-center justify-center h-full">
-              <p className="text-xl text-gray-500/90">Please upload a Chess JSON file to begin.</p>
+              <p className="text-xl text-gray-500/90">Please upload a Chess JSON file or load sample data.</p>
             </div>
           ) : processedGraphData && svgDimensions.width > 0 && svgDimensions.height > 0 ? (
             <>
@@ -508,7 +564,7 @@ const App: React.FC = () => {
                 onNodeClick={handleNodeClick}
                 selectedNodeId={selectedNodeData?.id || null}
                 sortConfig={sortConfig}
-                appIsDisabled={appIsDisabled}
+                appIsDisabled={appIsDisabled && !currentDataSourceName}
                 currentMoveIndex={currentMoveIndex}
                 currentGraphScope={currentGraphScope}
                 nodeColoringMetric={nodeColoringMetric}
@@ -525,7 +581,7 @@ const App: React.FC = () => {
             </>
           ) : (
              <div className="flex items-center justify-center h-full">
-                <p className="text-lg text-gray-400/90">{isLoading ? 'Processing data...' : 'Initializing visualization...'}</p>
+                <p className="text-lg text-gray-400/90">{isLoading ? 'Processing data...' : (currentDataSourceName && !error ? 'Initializing visualization...' : 'Load data to start.')}</p>
              </div>
           )}
         </main>
