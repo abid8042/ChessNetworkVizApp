@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Chess Network Visualization</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      body { 
+        margin: 0; 
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+        background-color: #e2e8f0; /* Changed to slate-200 */
+        color: #1d1d1f; 
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+      }
+      .tooltip {
+        position: absolute;
+        text-align: left;
+        padding: 8px 12px; 
+        font: 12px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        background: rgba(40, 42, 54, 0.9); /* Darker tooltip background */
+        color: #f8f8f2; /* Lighter text for dark tooltip */
+        border: 1px solid rgba(0,0,0,0.2); 
+        border-radius: 8px; 
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 0.2s ease-in-out, transform 0.2s ease-in-out;
+        transform: translateY(5px); 
+        z-index: 1000;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      }
+      .tooltip.visible {
+        opacity: 1;
+        transform: translateY(0);
+      }
+      .tooltip pre {
+          font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
+          color: #f8f8f2; /* Lighter pre text */
+          white-space: pre-wrap;
+          margin: 0;
+      }
+
+      .svg-icon {
+        display: inline-block;
+        width: 1em;
+        height: 1em;
+        vertical-align: -0.125em; 
+        fill: currentColor;
+      }
+
+      ::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+      }
+      ::-webkit-scrollbar-track {
+        background: transparent; 
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #94a3b8; /* slate-400 for scrollbar thumb */
+        border-radius: 3px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #64748b; /* slate-500 for scrollbar thumb hover */
+      }
+      * {
+        scrollbar-width: thin;
+        scrollbar-color: #94a3b8 transparent; 
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react/": "https://esm.sh/react@^19.1.0/",
+    "react": "https://esm.sh/react@^19.1.0",
+    "react-dom/": "https://esm.sh/react-dom@^19.1.0/",
+    "d3": "https://esm.sh/d3@^7.9.0"
+  }
+}
+</script>
+</head>
+  <body>
+    <noscript>You need to enable JavaScript to run this app.</noscript>
+    <div id="root"></div>
+  </body>
+</html><link rel="stylesheet" href="index.css">
+<script src="index.tsx" type="module"></script>

@@ -1,0 +1,6 @@
+{
+  "name": "Chess Network Visualization Dashboard v2",
+  "description": "An interactive web-based dashboard for visualizing and analyzing chess game data represented as network graphs. Users can upload game data, explore moves, view network layouts, filter nodes, and see detailed statistics.",
+  "requestFramePermissions": [],
+  "prompt": ""
+}
