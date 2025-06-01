@@ -1,0 +1,30 @@
+[Event "Norway Chess"]
+[Site "Stavanger NOR"]
+[Date "2025.05.26"]
+[EventDate "2025.05.26"]
+[Round "1.3"]
+[White "Carlsen, Magnus"]
+[Black "Gukesh D"]
+[Result "1-0"]
+[WhiteElo "2837"]
+[WhiteTitle "GM"]
+[WhiteFideId "1503014"]
+[BlackElo "2787"]
+[BlackTitle "GM"]
+[BlackFideId "46616543"]
+[ECO "D01"]
+[Opening "Rapport-Jobava System"]
+[ChapterName "Carlsen, Magnus - Gukesh D"]
+[Source "Lichess"]
+
+1. d4 Nf6 2. Nc3 d5 3. Bf4 c5 4. e3 Bg4 5. Be2 Bxe2
+6. Ncxe2 Nc6 7. Nf3 e6 8. c3 Be7 9. Ng3 O-O 10. Qe2 h6
+11. Rd1 Qa5 12. a3 Rfd8 13. h4 Qa4 14. Ne5 Nxe5 15. Bxe5 Nd7
+16. Bf4 Qa6 17. Qf3 Bd6 18. Nh5 Bxf4 19. Qxf4 e5 20. Qg3 Qg6
+21. Qxg6 fxg6 22. Ng3 exd4 23. cxd4 c4 24. Ne2 b5 25. Nc3 Nf6
+26. Rb1 Rab8 27. f3 a5 28. b4 cxb3 29. Rxb3 b4 30. axb4 Rxb4
+31. Ra3 Re8 32. Kd2 Rb2+ 33. Kd3 Rxg2 34. Rxa5 Rg3 35. Rf1 g5
+36. hxg5 Rxg5 37. Rfa1 h5 38. Ra8 Rxa8 39. Rxa8+ Kh7 40. e4 dxe4+
+41. fxe4 h4 42. e5 h3 43. exf6 h2 44. f7 Rg3+ 45. Kd2 h1=Q
+46. f8=Q Qh6+ 47. Kc2 Qg6+ 48. Kb2 Qb6+ 49. Ka2 Rg2+ 50. Ka3 Qb2+
+51. Ka4 Qxc3 52. Qh8+ Kg6 53. Ra6+ Kf5 54. Qf8+ Ke4 55. Re6+ 1-0

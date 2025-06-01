@@ -304,7 +304,7 @@ def process_pgn(pgn_path, out_path):
 
 if __name__=='__main__':
     # Hard-coded file locations; update these paths as needed.
-    pgn_file_path = "test_game.pgn"
-    output_json_path = "sample_datav4.json"
+    pgn_file_path = "/Users/ashutoshganguly/Desktop/chessappviz/ChessNetworkVizApp/carlsen_gukesh_2025.pgn"
+    output_json_path = "carlsen_gukesh_2025.json"
     
     process_pgn(pgn_file_path, output_json_path)

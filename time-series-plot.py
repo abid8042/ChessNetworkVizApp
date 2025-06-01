@@ -202,7 +202,7 @@ def process_pgn(pgn_file_path, output_html_path):
 
 if __name__ == "__main__":
     # Hard-coded file locations; update these paths as needed.
-    pgn_file_path = "alphazero_stockfish_2018.pgn"
+    pgn_file_path = "/Users/ashutoshganguly/Desktop/chessappviz/ChessNetworkVizApp/carlsen_gukesh_2025.pgn"
     output_html_path = "time_series_plot_extended2.html"
     
     process_pgn(pgn_file_path, output_html_path)
