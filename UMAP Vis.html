@@ -1,0 +1,1554 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UMAP Cluster Explorer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        /* Custom styles for multi-select dropdown */
+        .dropdown-content {
+            max-height: 256px;
+            overflow-y: auto;
+        }
+        
+        /* Scrollbar styling */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        ::-webkit-scrollbar-track {
+            background: #1f2937;
+        }
+        
+        ::-webkit-scrollbar-thumb {
+            background: #4b5563;
+            border-radius: 4px;
+        }
+        
+        ::-webkit-scrollbar-thumb:hover {
+            background: #6b7280;
+        }
+
+        /* Color legend styles */
+        .color-legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .color-legend-item:hover {
+            background-color: #374151;
+        }
+
+        .color-legend-item.selected {
+            background-color: #1f2937;
+            border: 1px solid #3b82f6;
+        }
+
+        .color-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        /* Info panel styles */
+        .info-panel {
+            position: fixed;
+            right: 20px;
+            top: 100px;
+            width: 320px;
+            max-height: 80vh;
+            overflow-y: auto;
+            background: #111827;
+            border: 1px solid #374151;
+            border-radius: 8px;
+            padding: 16px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+            z-index: 100;
+        }
+
+        .copy-button {
+            background: #3b82f6;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 4px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .copy-button:hover {
+            background: #2563eb;
+        }
+
+        .copy-button.copied {
+            background: #10b981;
+        }
+
+        /* Controls panel styles */
+        .controls-panel {
+            position: fixed;
+            left: 20px;
+            bottom: 20px;
+            width: 320px;
+            max-height: 60vh;
+            overflow-y: auto;
+            background: #111827;
+            border: 1px solid #374151;
+            border-radius: 8px;
+            padding: 16px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+            z-index: 100;
+        }
+
+        .control-group {
+            margin-bottom: 16px;
+        }
+
+        .control-label {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+            font-size: 12px;
+            color: #9ca3af;
+        }
+
+        .control-value {
+            color: #3b82f6;
+            font-weight: 500;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            height: 6px;
+            background: #374151;
+            border-radius: 3px;
+            outline: none;
+            -webkit-appearance: none;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 16px;
+            height: 16px;
+            background: #3b82f6;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+
+        input[type="range"]::-moz-range-thumb {
+            width: 16px;
+            height: 16px;
+            background: #3b82f6;
+            border-radius: 50%;
+            cursor: pointer;
+            border: none;
+        }
+
+        .toggle-switch {
+            position: relative;
+            width: 44px;
+            height: 24px;
+            background: #374151;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .toggle-switch.active {
+            background: #3b82f6;
+        }
+
+        .toggle-switch::after {
+            content: '';
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 20px;
+            height: 20px;
+            background: white;
+            border-radius: 50%;
+            transition: transform 0.2s;
+        }
+
+        .toggle-switch.active::after {
+            transform: translateX(20px);
+        }
+
+        .control-button {
+            width: 100%;
+            padding: 8px;
+            background: #374151;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            font-size: 14px;
+        }
+
+        .control-button:hover {
+            background: #4b5563;
+        }
+
+        .control-button.primary {
+            background: #3b82f6;
+        }
+
+        .control-button.primary:hover {
+            background: #2563eb;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white">
+    <!-- Header -->
+    <header class="border-b border-gray-800 px-6 py-4">
+        <div class="flex items-center justify-between">
+            <div>
+                <h1 class="text-2xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
+                    UMAP Cluster Explorer
+                </h1>
+                <p class="text-sm text-gray-400 mt-1">Interactive 3D visualization of UMAP embeddings</p>
+            </div>
+            
+            <div id="stats-container" class="hidden">
+                <div class="flex items-center gap-4 text-sm">
+                    <div class="text-gray-400">
+                        <span id="total-points" class="text-white font-medium">0</span> points
+                    </div>
+                    <div class="text-gray-400">
+                        <span id="total-clusters" class="text-white font-medium">0</span> clusters
+                    </div>
+                    <div class="text-gray-400">
+                        <span id="noise-points" class="text-white font-medium">0</span> noise
+                    </div>
+                </div>
+            </div>
+            
+            <div id="upload-container">
+                <label class="cursor-pointer">
+                    <input type="file" accept=".json" id="file-input" class="hidden">
+                    <div class="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+                        </svg>
+                        <span>Upload JSON</span>
+                    </div>
+                </label>
+            </div>
+        </div>
+    </header>
+    
+    <!-- Main Content -->
+    <div id="main-content" class="hidden">
+        <div class="flex h-[calc(100vh-80px)]">
+            <!-- Sidebar with filters -->
+            <aside class="w-80 border-r border-gray-800 p-4 overflow-y-auto">
+                <h2 class="text-lg font-semibold mb-4">Filters</h2>
+                
+                <div class="space-y-4" id="filters-container">
+                    <!-- Filters will be dynamically added here -->
+                </div>
+                
+                <!-- Color Legend -->
+                <div class="mt-6">
+                    <h3 class="text-lg font-semibold mb-3">Color Legend</h3>
+                    <div id="color-legend" class="space-y-1">
+                        <!-- Color legend items will be added here -->
+                    </div>
+                </div>
+                
+                <!-- Stats -->
+                <div class="mt-6 p-4 bg-gray-800 rounded-lg">
+                    <h3 class="text-sm font-semibold mb-2">Current View</h3>
+                    <div class="space-y-1 text-sm">
+                        <div class="flex justify-between">
+                            <span class="text-gray-400">Points:</span>
+                            <span id="filtered-points">0</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-400">Clusters:</span>
+                            <span id="filtered-clusters">0</span>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+            
+            <!-- 3D Visualization -->
+            <main class="flex-1 relative bg-gray-950">
+                <div id="three-container" class="w-full h-full"></div>
+                
+                <!-- Tooltip -->
+                <div id="tooltip" class="hidden absolute pointer-events-none z-50 bg-gray-900 border border-gray-700 rounded-lg shadow-xl p-3 text-sm max-w-xs">
+                    <!-- Tooltip content will be dynamically updated -->
+                </div>
+                
+                <!-- Controls hint -->
+                <div class="absolute bottom-4 left-4 bg-gray-800 bg-opacity-80 px-4 py-2 rounded-lg text-sm">
+                    <p class="text-gray-300">
+                        <span class="text-white">Scroll</span> to zoom • 
+                        <span class="text-white"> Drag</span> to rotate • 
+                        <span class="text-white"> Right-click drag</span> to pan •
+                        <span class="text-white"> Click</span> to select
+                    </p>
+                </div>
+            </main>
+        </div>
+    </div>
+    
+    <!-- Empty state -->
+    <div id="empty-state" class="flex items-center justify-center h-[calc(100vh-80px)]">
+        <div class="text-center">
+            <div class="w-32 h-32 mx-auto mb-6 rounded-full bg-gray-800 flex items-center justify-center">
+                <svg class="w-12 h-12 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+                </svg>
+            </div>
+            <h2 class="text-xl font-semibold mb-2">No data loaded</h2>
+            <p class="text-gray-400 mb-6">Upload a JSON file to visualize your UMAP embeddings</p>
+            <label class="cursor-pointer">
+                <input type="file" accept=".json" id="file-input-empty" class="hidden">
+                <div class="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+                    </svg>
+                    <span>Choose File</span>
+                </div>
+            </label>
+        </div>
+    </div>
+
+    <!-- Information Panel (hidden by default) -->
+    <div id="info-panel" class="info-panel hidden">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-semibold">Point Information</h3>
+            <button onclick="closeInfoPanel()" class="text-gray-400 hover:text-white">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </button>
+        </div>
+        <div id="info-content" class="space-y-3">
+            <!-- Info content will be dynamically updated -->
+        </div>
+    </div>
+
+    <!-- Visualization Controls Panel -->
+    <div id="controls-panel" class="controls-panel hidden">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-semibold">Visualization Controls</h3>
+            <button onclick="toggleControlsPanel()" class="text-gray-400 hover:text-white">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                </svg>
+            </button>
+        </div>
+        
+        <!-- Visual Settings -->
+        <div class="mb-6">
+            <h4 class="text-sm font-semibold mb-3 text-gray-300">Visual Settings</h4>
+            
+            <div class="control-group">
+                <div class="control-label">
+                    <span>Point Size</span>
+                    <span class="control-value" id="point-size-value">1.5</span>
+                </div>
+                <input type="range" id="point-size" min="0.5" max="5" step="0.1" value="1.5">
+            </div>
+            
+            <div class="control-group">
+                <div class="control-label">
+                    <span>Point Opacity</span>
+                    <span class="control-value" id="point-opacity-value">0.95</span>
+                </div>
+                <input type="range" id="point-opacity" min="0.1" max="1" step="0.05" value="0.95">
+            </div>
+            
+            <div class="control-group">
+                <div class="control-label">
+                    <span>Background Brightness</span>
+                    <span class="control-value" id="bg-brightness-value">10</span>
+                </div>
+                <input type="range" id="bg-brightness" min="0" max="100" step="5" value="10">
+            </div>
+        </div>
+        
+        <!-- Animation Settings -->
+        <div class="mb-6">
+            <h4 class="text-sm font-semibold mb-3 text-gray-300">Animation</h4>
+            
+            <div class="control-group">
+                <div class="control-label">
+                    <span>Auto Rotation</span>
+                    <div class="toggle-switch" id="auto-rotation" data-active="true"></div>
+                </div>
+            </div>
+            
+            <div class="control-group">
+                <div class="control-label">
+                    <span>Rotation Speed</span>
+                    <span class="control-value" id="rotation-speed-value">0.002</span>
+                </div>
+                <input type="range" id="rotation-speed" min="0" max="0.01" step="0.001" value="0.002">
+            </div>
+        </div>
+        
+        <!-- Camera Settings -->
+        <div class="mb-6">
+            <h4 class="text-sm font-semibold mb-3 text-gray-300">Camera</h4>
+            
+            <div class="control-group">
+                <div class="control-label">
+                    <span>Field of View</span>
+                    <span class="control-value" id="fov-value">60</span>
+                </div>
+                <input type="range" id="fov" min="30" max="90" step="5" value="60">
+            </div>
+            
+            <div class="control-group">
+                <div class="control-label">
+                    <span>Zoom Sensitivity</span>
+                    <span class="control-value" id="zoom-sensitivity-value">0.05</span>
+                </div>
+                <input type="range" id="zoom-sensitivity" min="0.01" max="0.1" step="0.01" value="0.05">
+            </div>
+        </div>
+        
+        <!-- Display Options -->
+        <div class="mb-6">
+            <h4 class="text-sm font-semibold mb-3 text-gray-300">Display</h4>
+            
+            <div class="control-group">
+                <div class="control-label">
+                    <span>Show Axes</span>
+                    <div class="toggle-switch" id="show-axes" data-active="false"></div>
+                </div>
+            </div>
+            
+            <div class="control-group">
+                <div class="control-label">
+                    <span>Show Grid</span>
+                    <div class="toggle-switch" id="show-grid" data-active="false"></div>
+                </div>
+            </div>
+            
+            <div class="control-group">
+                <div class="control-label">
+                    <span>Show Stats Overlay</span>
+                    <div class="toggle-switch" id="show-stats" data-active="false"></div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Actions -->
+        <div class="space-y-2">
+            <button class="control-button primary" onclick="resetView()">Reset View</button>
+            <button class="control-button" onclick="exportScreenshot()">Export Screenshot</button>
+            <button class="control-button" onclick="exportData()">Export Filtered Data</button>
+        </div>
+    </div>
+
+    <!-- Controls Toggle Button -->
+    <div class="fixed left-20 bottom-80 z-50">
+        <button onclick="toggleControlsPanel()" class="bg-gray-800 hover:bg-gray-700 text-white px-3 py-2 rounded-lg shadow-lg transition-colors flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"></path>
+            </svg>
+            <span class="text-sm">Controls</span>
+        </button>
+    </div>
+
+    <script>
+        // Global variables
+        let data = [];
+        let filteredData = [];
+        let filters = {
+            fen: [],
+            eco: [],
+            name: [],
+            graph_type: [],
+            cluster_label: [],
+            color: []
+        };
+        let selectedPoint = null;
+        let colorScale = null;
+        let selectedColors = new Set();
+        
+        // Three.js variables
+        let scene, camera, renderer, points, raycaster, mouse;
+        let tooltip = document.getElementById('tooltip');
+        let axesHelper, gridHelper;
+        let stats = null;
+        
+        // Visualization parameters
+        let vizParams = {
+            pointSize: 1.5,
+            pointOpacity: 0.95,
+            bgBrightness: 10,
+            autoRotation: true,
+            rotationSpeed: 0.002,
+            fov: 60,
+            zoomSensitivity: 0.05,
+            showAxes: false,
+            showGrid: false,
+            showStats: false
+        };
+        
+        // Initialize
+        document.getElementById('file-input').addEventListener('change', handleFileUpload);
+        document.getElementById('file-input-empty').addEventListener('change', handleFileUpload);
+        initializeControls();
+        
+        // Parse unique_id into components
+        function parseUniqueId(uniqueId) {
+            const parts = uniqueId.split('_');
+            const graphTypeKeywords = ['combined', 'white', 'black'];
+            let graphType = '';
+            let nameParts = [];
+            
+            if (parts.length > 3 && graphTypeKeywords.includes(parts[parts.length - 1])) {
+                graphType = parts[parts.length - 1];
+                nameParts = parts.slice(2, -1);
+            } else {
+                nameParts = parts.slice(2);
+            }
+            
+            return {
+                fen: parts[0] || '',
+                eco: parts[1] || '',
+                name: nameParts.join('_') || '',
+                graph_type: graphType
+            };
+        }
+        
+        // Initialize controls
+        function initializeControls() {
+            // Point size
+            document.getElementById('point-size').addEventListener('input', (e) => {
+                vizParams.pointSize = parseFloat(e.target.value);
+                document.getElementById('point-size-value').textContent = e.target.value;
+                updatePointSizes();
+            });
+            
+            // Point opacity
+            document.getElementById('point-opacity').addEventListener('input', (e) => {
+                vizParams.pointOpacity = parseFloat(e.target.value);
+                document.getElementById('point-opacity-value').textContent = e.target.value;
+                updatePointMaterial();
+            });
+            
+            // Background brightness
+            document.getElementById('bg-brightness').addEventListener('input', (e) => {
+                vizParams.bgBrightness = parseInt(e.target.value);
+                document.getElementById('bg-brightness-value').textContent = e.target.value;
+                updateBackground();
+            });
+            
+            // Auto rotation toggle
+            document.getElementById('auto-rotation').addEventListener('click', function() {
+                vizParams.autoRotation = !vizParams.autoRotation;
+                this.classList.toggle('active');
+                this.setAttribute('data-active', vizParams.autoRotation);
+            });
+            
+            // Rotation speed
+            document.getElementById('rotation-speed').addEventListener('input', (e) => {
+                vizParams.rotationSpeed = parseFloat(e.target.value);
+                document.getElementById('rotation-speed-value').textContent = e.target.value;
+            });
+            
+            // Field of view
+            document.getElementById('fov').addEventListener('input', (e) => {
+                vizParams.fov = parseInt(e.target.value);
+                document.getElementById('fov-value').textContent = e.target.value;
+                updateCamera();
+            });
+            
+            // Zoom sensitivity
+            document.getElementById('zoom-sensitivity').addEventListener('input', (e) => {
+                vizParams.zoomSensitivity = parseFloat(e.target.value);
+                document.getElementById('zoom-sensitivity-value').textContent = e.target.value;
+            });
+            
+            // Show axes toggle
+            document.getElementById('show-axes').addEventListener('click', function() {
+                vizParams.showAxes = !vizParams.showAxes;
+                this.classList.toggle('active');
+                this.setAttribute('data-active', vizParams.showAxes);
+                toggleAxes();
+            });
+            
+            // Show grid toggle
+            document.getElementById('show-grid').addEventListener('click', function() {
+                vizParams.showGrid = !vizParams.showGrid;
+                this.classList.toggle('active');
+                this.setAttribute('data-active', vizParams.showGrid);
+                toggleGrid();
+            });
+            
+            // Show stats toggle
+            document.getElementById('show-stats').addEventListener('click', function() {
+                vizParams.showStats = !vizParams.showStats;
+                this.classList.toggle('active');
+                this.setAttribute('data-active', vizParams.showStats);
+                toggleStats();
+            });
+            
+            // Set initial toggle states
+            document.getElementById('auto-rotation').classList.add('active');
+        }
+        
+        // Update functions for controls
+        function updatePointSizes() {
+            if (!points || !points.geometry.attributes.size) return;
+            
+            const sizes = points.geometry.attributes.size.array;
+            const container = document.getElementById('three-container');
+            const baseSize = Math.min(container.clientWidth, container.clientHeight) / 600;
+            const pointSize = Math.max(0.8, Math.min(3, baseSize * vizParams.pointSize));
+            
+            for (let i = 0; i < sizes.length; i++) {
+                sizes[i] = pointSize;
+            }
+            points.geometry.attributes.size.needsUpdate = true;
+        }
+        
+        function updatePointMaterial() {
+            if (!points) return;
+            
+            // Update the fragment shader with new opacity
+            const fragmentShader = `
+                varying vec3 vColor;
+                void main() {
+                    vec2 xy = gl_PointCoord.xy - vec2(0.5);
+                    float r = dot(xy, xy);
+                    if (r > 0.25) discard;
+                    float opacity = 1.0 - r * 2.0;
+                    gl_FragColor = vec4(vColor, opacity * ${vizParams.pointOpacity});
+                }
+            `;
+            
+            points.material.fragmentShader = fragmentShader;
+            points.material.needsUpdate = true;
+        }
+        
+        function updateBackground() {
+            if (!scene) return;
+            const brightness = vizParams.bgBrightness / 100;
+            const color = new THREE.Color(brightness * 0.1, brightness * 0.1, brightness * 0.1);
+            scene.background = color;
+        }
+        
+        function updateCamera() {
+            if (!camera) return;
+            camera.fov = vizParams.fov;
+            camera.updateProjectionMatrix();
+        }
+        
+        function toggleAxes() {
+            if (!scene) return;
+            
+            if (vizParams.showAxes) {
+                axesHelper = new THREE.AxesHelper(50);
+                scene.add(axesHelper);
+            } else if (axesHelper) {
+                scene.remove(axesHelper);
+                axesHelper = null;
+            }
+        }
+        
+        function toggleGrid() {
+            if (!scene) return;
+            
+            if (vizParams.showGrid) {
+                gridHelper = new THREE.GridHelper(100, 20, 0x444444, 0x222222);
+                gridHelper.rotation.x = Math.PI / 2;
+                scene.add(gridHelper);
+            } else if (gridHelper) {
+                scene.remove(gridHelper);
+                gridHelper = null;
+            }
+        }
+        
+        function toggleStats() {
+            const container = document.getElementById('three-container');
+            
+            if (vizParams.showStats && !stats) {
+                // Create simple stats overlay
+                stats = document.createElement('div');
+                stats.id = 'stats-overlay';
+                stats.style.position = 'absolute';
+                stats.style.top = '10px';
+                stats.style.left = '10px';
+                stats.style.background = 'rgba(0,0,0,0.8)';
+                stats.style.padding = '10px';
+                stats.style.borderRadius = '5px';
+                stats.style.fontSize = '12px';
+                stats.style.color = 'white';
+                stats.style.fontFamily = 'monospace';
+                container.appendChild(stats);
+            } else if (!vizParams.showStats && stats) {
+                container.removeChild(stats);
+                stats = null;
+            }
+        }
+        
+        function toggleControlsPanel() {
+            const panel = document.getElementById('controls-panel');
+            panel.classList.toggle('hidden');
+        }
+        
+        function resetView() {
+            if (!camera || !points) return;
+            
+            // Reset camera position
+            camera.position.set(0, 0, 60);
+            camera.lookAt(0, 0, 0);
+            
+            // Reset rotation
+            targetRotationX = 0;
+            targetRotationY = 0;
+            if (points) {
+                points.rotation.x = 0;
+                points.rotation.y = 0;
+            }
+            
+            // Reset parameters
+            vizParams.pointSize = 1.5;
+            vizParams.pointOpacity = 0.95;
+            vizParams.bgBrightness = 10;
+            vizParams.fov = 60;
+            
+            // Update UI
+            document.getElementById('point-size').value = vizParams.pointSize;
+            document.getElementById('point-size-value').textContent = vizParams.pointSize;
+            document.getElementById('point-opacity').value = vizParams.pointOpacity;
+            document.getElementById('point-opacity-value').textContent = vizParams.pointOpacity;
+            document.getElementById('bg-brightness').value = vizParams.bgBrightness;
+            document.getElementById('bg-brightness-value').textContent = vizParams.bgBrightness;
+            document.getElementById('fov').value = vizParams.fov;
+            document.getElementById('fov-value').textContent = vizParams.fov;
+            
+            // Apply changes
+            updatePointSizes();
+            updatePointMaterial();
+            updateBackground();
+            updateCamera();
+        }
+        
+        function exportScreenshot() {
+            if (!renderer) return;
+            
+            renderer.render(scene, camera);
+            const dataURL = renderer.domElement.toDataURL('image/png');
+            
+            const link = document.createElement('a');
+            link.download = 'umap-visualization.png';
+            link.href = dataURL;
+            link.click();
+        }
+        
+        function exportData() {
+            if (filteredData.length === 0) {
+                alert('No data to export');
+                return;
+            }
+            
+            const dataStr = JSON.stringify(filteredData, null, 2);
+            const blob = new Blob([dataStr], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            
+            const link = document.createElement('a');
+            link.download = 'filtered-umap-data.json';
+            link.href = url;
+            link.click();
+            
+            URL.revokeObjectURL(url);
+        }
+        
+        // Handle file upload
+        async function handleFileUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            try {
+                const text = await file.text();
+                const jsonData = JSON.parse(text);
+                
+                // Process data
+                data = jsonData.map(item => {
+                    const parsed = parseUniqueId(item.unique_id);
+                    return {
+                        ...item,
+                        ...parsed,
+                        graph_type: item.graph_type || parsed.graph_type
+                    };
+                });
+                
+                // Setup color scale
+                const clusterIds = [...new Set(data.map(d => d.cluster_label))].sort((a, b) => a - b);
+                colorScale = d3.scaleOrdinal()
+                    .domain(clusterIds)
+                    .range(d3.schemeSet3.concat(d3.schemePaired));
+                
+                // Add color property to data
+                data = data.map(item => ({
+                    ...item,
+                    color: item.is_noise ? '#444444' : colorScale(item.cluster_label)
+                }));
+                
+                filteredData = [...data];
+                
+                // Update UI
+                document.getElementById('empty-state').classList.add('hidden');
+                document.getElementById('main-content').classList.remove('hidden');
+                document.getElementById('upload-container').classList.add('hidden');
+                document.getElementById('stats-container').classList.remove('hidden');
+                
+                updateStats();
+                createFilters();
+                createColorLegend();
+                initThreeJS();
+                
+            } catch (error) {
+                console.error('Error loading file:', error);
+                alert('Error loading file. Please ensure it\'s a valid JSON file.');
+            }
+        }
+        
+        // Update statistics
+        function updateStats() {
+            const clusters = [...new Set(data.map(d => d.cluster_label))];
+            const noiseCount = data.filter(d => d.is_noise).length;
+            
+            document.getElementById('total-points').textContent = data.length;
+            document.getElementById('total-clusters').textContent = clusters.filter(c => c !== -1).length;
+            document.getElementById('noise-points').textContent = noiseCount;
+            
+            updateFilteredStats();
+        }
+        
+        function updateFilteredStats() {
+            document.getElementById('filtered-points').textContent = filteredData.length;
+            const filteredClusters = [...new Set(filteredData.map(d => d.cluster_label).filter(c => c !== -1))];
+            document.getElementById('filtered-clusters').textContent = filteredClusters.length;
+        }
+        
+        // Create multi-select dropdown
+        function createMultiSelect(label, key, options) {
+            const container = document.createElement('div');
+            container.className = 'relative';
+            container.innerHTML = `
+                <button class="multi-select-btn w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white flex items-center justify-between hover:bg-gray-750 transition-colors">
+                    <span class="text-sm">${label}: <span class="selected-count">All</span></span>
+                    <svg class="w-4 h-4 chevron transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                    </svg>
+                </button>
+                <div class="dropdown hidden absolute z-50 w-full mt-1 bg-gray-800 border border-gray-700 rounded-lg shadow-xl">
+                    ${key !== 'cluster_label' ? `
+                        <div class="p-2 border-b border-gray-700">
+                            <div class="relative">
+                                <svg class="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                                </svg>
+                                <input type="text" class="search-input w-full pl-10 pr-3 py-2 bg-gray-900 border border-gray-700 rounded text-white text-sm focus:outline-none focus:border-blue-500" placeholder="Search...">
+                            </div>
+                        </div>
+                    ` : ''}
+                    <div class="dropdown-content p-2">
+                        <button class="clear-btn w-full text-left px-3 py-2 text-sm text-gray-300 hover:bg-gray-700 rounded transition-colors">
+                            Clear all
+                        </button>
+                        <div class="options-container"></div>
+                    </div>
+                </div>
+            `;
+            
+            const button = container.querySelector('.multi-select-btn');
+            const dropdown = container.querySelector('.dropdown');
+            const searchInput = container.querySelector('.search-input');
+            const clearBtn = container.querySelector('.clear-btn');
+            const optionsContainer = container.querySelector('.options-container');
+            const selectedCountSpan = container.querySelector('.selected-count');
+            const chevron = container.querySelector('.chevron');
+            
+            // Create options
+            function renderOptions(filteredOptions = options) {
+                optionsContainer.innerHTML = '';
+                filteredOptions.forEach(option => {
+                    const label = document.createElement('label');
+                    label.className = 'flex items-center px-3 py-2 hover:bg-gray-700 rounded cursor-pointer transition-colors';
+                    label.innerHTML = `
+                        <input type="checkbox" ${filters[key].includes(option) ? 'checked' : ''} 
+                               class="mr-3 rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500">
+                        <span class="text-sm text-gray-300">${option}</span>
+                    `;
+                    
+                    const checkbox = label.querySelector('input');
+                    checkbox.addEventListener('change', (e) => {
+                        if (e.target.checked) {
+                            filters[key] = [...filters[key], option];
+                        } else {
+                            filters[key] = filters[key].filter(v => v !== option);
+                        }
+                        updateSelectedCount();
+                        applyFilters();
+                    });
+                    
+                    optionsContainer.appendChild(label);
+                });
+            }
+            
+            // Update selected count display
+            function updateSelectedCount() {
+                const count = filters[key].length;
+                selectedCountSpan.textContent = count > 0 ? `${count} selected` : 'All';
+            }
+            
+            // Toggle dropdown
+            button.addEventListener('click', () => {
+                const isOpen = !dropdown.classList.contains('hidden');
+                
+                // Close all other dropdowns
+                document.querySelectorAll('.dropdown').forEach(d => d.classList.add('hidden'));
+                document.querySelectorAll('.chevron').forEach(c => c.classList.remove('rotate-180'));
+                
+                if (!isOpen) {
+                    dropdown.classList.remove('hidden');
+                    chevron.classList.add('rotate-180');
+                    if (searchInput) searchInput.focus();
+                } else {
+                    dropdown.classList.add('hidden');
+                    chevron.classList.remove('rotate-180');
+                }
+            });
+            
+            // Search functionality
+            if (searchInput) {
+                searchInput.addEventListener('input', (e) => {
+                    const search = e.target.value.toLowerCase();
+                    const filtered = options.filter(opt => opt.toLowerCase().includes(search));
+                    renderOptions(filtered);
+                });
+            }
+            
+            // Clear all
+            clearBtn.addEventListener('click', () => {
+                filters[key] = [];
+                renderOptions();
+                updateSelectedCount();
+                applyFilters();
+            });
+            
+            // Close dropdown when clicking outside
+            document.addEventListener('click', (e) => {
+                if (!container.contains(e.target)) {
+                    dropdown.classList.add('hidden');
+                    chevron.classList.remove('rotate-180');
+                }
+            });
+            
+            renderOptions();
+            updateSelectedCount();
+            
+            return container;
+        }
+        
+        // Get unique values for a key
+        function getUniqueValues(key) {
+            return [...new Set(data.map(d => String(d[key] || '')).filter(v => v !== ''))].sort();
+        }
+        
+        // Create all filters
+        function createFilters() {
+            const filtersContainer = document.getElementById('filters-container');
+            filtersContainer.innerHTML = '';
+            
+            // Add filter dropdowns
+            const filterConfigs = [
+                { label: 'FEN', key: 'fen' },
+                { label: 'ECO', key: 'eco' },
+                { label: 'Name', key: 'name' },
+                { label: 'Graph Type', key: 'graph_type' },
+                { label: 'Cluster', key: 'cluster_label' }
+            ];
+            
+            filterConfigs.forEach(config => {
+                const options = getUniqueValues(config.key);
+                const multiSelect = createMultiSelect(config.label, config.key, options);
+                filtersContainer.appendChild(multiSelect);
+            });
+            
+            // Add reset button
+            const resetBtn = document.createElement('button');
+            resetBtn.className = 'w-full px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition-colors text-sm';
+            resetBtn.textContent = 'Reset All Filters';
+            resetBtn.addEventListener('click', () => {
+                filters = {
+                    fen: [],
+                    eco: [],
+                    name: [],
+                    graph_type: [],
+                    cluster_label: [],
+                    color: []
+                };
+                selectedColors.clear();
+                createFilters();
+                createColorLegend();
+                applyFilters();
+            });
+            
+            filtersContainer.appendChild(resetBtn);
+        }
+        
+        // Create color legend
+        function createColorLegend() {
+            const legendContainer = document.getElementById('color-legend');
+            legendContainer.innerHTML = '';
+            
+            // Get unique clusters and their colors
+            const clusters = [...new Set(data.map(d => ({
+                label: d.is_noise ? 'Noise' : `Cluster ${d.cluster_label}`,
+                color: d.color,
+                id: d.cluster_label
+            })))];
+            
+            // Remove duplicates
+            const uniqueClusters = [];
+            const seen = new Set();
+            clusters.forEach(cluster => {
+                const key = `${cluster.label}-${cluster.color}`;
+                if (!seen.has(key)) {
+                    seen.add(key);
+                    uniqueClusters.push(cluster);
+                }
+            });
+            
+            // Sort clusters
+            uniqueClusters.sort((a, b) => {
+                if (a.id === -1) return 1;
+                if (b.id === -1) return -1;
+                return a.id - b.id;
+            });
+            
+            // Create legend items
+            uniqueClusters.forEach(cluster => {
+                const item = document.createElement('div');
+                item.className = `color-legend-item ${selectedColors.has(cluster.color) ? 'selected' : ''}`;
+                item.innerHTML = `
+                    <div class="color-dot" style="background-color: ${cluster.color}"></div>
+                    <span class="text-sm">${cluster.label}</span>
+                `;
+                
+                item.addEventListener('click', () => {
+                    if (selectedColors.has(cluster.color)) {
+                        selectedColors.delete(cluster.color);
+                        item.classList.remove('selected');
+                    } else {
+                        selectedColors.add(cluster.color);
+                        item.classList.add('selected');
+                    }
+                    filters.color = Array.from(selectedColors);
+                    applyFilters();
+                });
+                
+                legendContainer.appendChild(item);
+            });
+        }
+        
+        // Apply filters
+        function applyFilters() {
+            filteredData = data.filter(point => {
+                // Check all filters
+                for (const [key, values] of Object.entries(filters)) {
+                    if (values.length > 0) {
+                        if (key === 'color') {
+                            if (!values.includes(point.color)) return false;
+                        } else {
+                            if (!values.includes(String(point[key]))) return false;
+                        }
+                    }
+                }
+                return true;
+            });
+            
+            updateFilteredStats();
+            if (scene) updateVisualization();
+        }
+        
+        // Initialize Three.js
+        function initThreeJS() {
+            const container = document.getElementById('three-container');
+            
+            // Scene setup
+            scene = new THREE.Scene();
+            const brightness = vizParams.bgBrightness / 100;
+            scene.background = new THREE.Color(brightness * 0.1, brightness * 0.1, brightness * 0.1);
+            
+            // Camera setup
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+            camera = new THREE.PerspectiveCamera(vizParams.fov, width / height, 0.1, 1000);
+            camera.position.set(0, 0, 60);
+            
+            // Renderer setup
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(width, height);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.domElement.style.cursor = 'grab';
+            container.appendChild(renderer.domElement);
+            
+            // Lights
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.4);
+            directionalLight.position.set(10, 10, 10);
+            scene.add(directionalLight);
+            
+            // Raycaster for mouse interaction
+            raycaster = new THREE.Raycaster();
+            mouse = new THREE.Vector2();
+            
+            // Create visualization
+            createPointCloud();
+            
+            // Add event listeners
+            setupEventListeners();
+            
+            // Animation loop
+            animate();
+            
+            // Handle resize
+            window.addEventListener('resize', handleResize);
+        }
+        
+        // Create point cloud
+        function createPointCloud() {
+            if (points) {
+                scene.remove(points);
+                points.geometry.dispose();
+                points.material.dispose();
+            }
+            
+            const positions = new Float32Array(filteredData.length * 3);
+            const colors = new Float32Array(filteredData.length * 3);
+            const sizes = new Float32Array(filteredData.length);
+            
+            // Calculate bounds
+            let minX = Infinity, maxX = -Infinity;
+            let minY = Infinity, maxY = -Infinity;
+            let minZ = Infinity, maxZ = -Infinity;
+            
+            filteredData.forEach(point => {
+                minX = Math.min(minX, point.x);
+                maxX = Math.max(maxX, point.x);
+                minY = Math.min(minY, point.y);
+                maxY = Math.max(maxY, point.y);
+                minZ = Math.min(minZ, point.z);
+                maxZ = Math.max(maxZ, point.z);
+            });
+            
+            const centerX = (minX + maxX) / 2;
+            const centerY = (minY + maxY) / 2;
+            const centerZ = (minZ + maxZ) / 2;
+            const maxRange = Math.max(maxX - minX, maxY - minY, maxZ - minZ);
+            const scaleFactor = maxRange > 0 ? 40 / maxRange : 1;
+            
+            const container = document.getElementById('three-container');
+            const baseSize = Math.min(container.clientWidth, container.clientHeight) / 600;
+            const pointSize = Math.max(0.8, Math.min(3, baseSize * vizParams.pointSize));
+            
+            filteredData.forEach((point, i) => {
+                positions[i * 3] = (point.x - centerX) * scaleFactor;
+                positions[i * 3 + 1] = (point.y - centerY) * scaleFactor;
+                positions[i * 3 + 2] = (point.z - centerZ) * scaleFactor;
+                
+                const rgb = d3.rgb(point.color);
+                colors[i * 3] = rgb.r / 255;
+                colors[i * 3 + 1] = rgb.g / 255;
+                colors[i * 3 + 2] = rgb.b / 255;
+                
+                sizes[i] = pointSize;
+            });
+            
+            const geometry = new THREE.BufferGeometry();
+            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+            geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+            
+            const vertexShader = `
+                attribute float size;
+                varying vec3 vColor;
+                void main() {
+                    vColor = color;
+                    vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+                    gl_PointSize = size * (400.0 / -mvPosition.z);
+                    gl_Position = projectionMatrix * mvPosition;
+                }
+            `;
+            
+            const fragmentShader = `
+                varying vec3 vColor;
+                void main() {
+                    vec2 xy = gl_PointCoord.xy - vec2(0.5);
+                    float r = dot(xy, xy);
+                    if (r > 0.25) discard;
+                    float opacity = 1.0 - r * 2.0;
+                    gl_FragColor = vec4(vColor, opacity * ${vizParams.pointOpacity});
+                }
+            `;
+            
+            const material = new THREE.ShaderMaterial({
+                vertexShader,
+                fragmentShader,
+                vertexColors: true,
+                transparent: true,
+                depthTest: true,
+                depthWrite: true,
+                blending: THREE.NormalBlending
+            });
+            
+            points = new THREE.Points(geometry, material);
+            scene.add(points);
+        }
+        
+        // Update visualization
+        function updateVisualization() {
+            createPointCloud();
+        }
+        
+        // Setup event listeners
+        let targetRotationX = 0;
+        let targetRotationY = 0;
+        let mouseX = 0;
+        let mouseY = 0;
+        let isMouseDown = false;
+        let isPanning = false;
+        let panStart = new THREE.Vector2();
+        
+        function setupEventListeners() {
+            const container = document.getElementById('three-container');
+            
+            container.addEventListener('mousemove', onMouseMove);
+            container.addEventListener('mousedown', onMouseDown);
+            container.addEventListener('mouseup', onMouseUp);
+            container.addEventListener('mouseleave', onMouseLeave);
+            container.addEventListener('wheel', onWheel);
+            container.addEventListener('contextmenu', (e) => e.preventDefault());
+            container.addEventListener('click', onMouseClick);
+        }
+        
+        function onMouseMove(event) {
+            const container = document.getElementById('three-container');
+            const rect = container.getBoundingClientRect();
+            const x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+            const y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+            
+            mouse.x = x;
+            mouse.y = y;
+            
+            // Hover detection
+            if (!isMouseDown && !isPanning && points) {
+                raycaster.setFromCamera(mouse, camera);
+                const threshold = Math.max(0.8, 2);
+                raycaster.params.Points.threshold = threshold;
+                
+                const intersects = raycaster.intersectObject(points);
+                
+                if (intersects.length > 0) {
+                    const index = intersects[0].index;
+                    const hoveredPoint = filteredData[index];
+                    
+                    // Update tooltip
+                    showTooltip(event.clientX, event.clientY, hoveredPoint);
+                    
+                    // Highlight point
+                    const sizes = points.geometry.attributes.size.array;
+                    const container = document.getElementById('three-container');
+                    const baseSize = Math.min(container.clientWidth, container.clientHeight) / 600;
+                    const pointSize = Math.max(0.8, Math.min(3, baseSize * vizParams.pointSize));
+                    
+                    for (let i = 0; i < sizes.length; i++) {
+                        sizes[i] = pointSize;
+                    }
+                    sizes[index] = pointSize * 1.5;
+                    points.geometry.attributes.size.needsUpdate = true;
+                    
+                    renderer.domElement.style.cursor = 'pointer';
+                } else {
+                    hideTooltip();
+                    
+                    // Reset sizes
+                    if (points && points.geometry.attributes.size) {
+                        const sizes = points.geometry.attributes.size.array;
+                        const container = document.getElementById('three-container');
+                        const baseSize = Math.min(container.clientWidth, container.clientHeight) / 600;
+                        const pointSize = Math.max(0.8, Math.min(3, baseSize * 1.5));
+                        
+                        for (let i = 0; i < sizes.length; i++) {
+                            sizes[i] = pointSize;
+                        }
+                        points.geometry.attributes.size.needsUpdate = true;
+                    }
+                    
+                    renderer.domElement.style.cursor = isMouseDown ? 'grabbing' : 'grab';
+                }
+            }
+            
+            if (isMouseDown && !isPanning) {
+                targetRotationY += (x - mouseX) * 2;
+                targetRotationX += (y - mouseY) * 2;
+                renderer.domElement.style.cursor = 'grabbing';
+            } else if (isPanning) {
+                const panDeltaX = (x - panStart.x) * 30;
+                const panDeltaY = (y - panStart.y) * 30;
+                camera.position.x += panDeltaX;
+                camera.position.y += panDeltaY;
+                panStart.set(x, y);
+                renderer.domElement.style.cursor = 'move';
+            }
+            
+            mouseX = x;
+            mouseY = y;
+        }
+        
+        function onMouseDown(event) {
+            if (event.button === 0) {
+                isMouseDown = true;
+            } else if (event.button === 2) {
+                isPanning = true;
+                const container = document.getElementById('three-container');
+                const rect = container.getBoundingClientRect();
+                panStart.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+                panStart.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+            }
+        }
+        
+        function onMouseUp(event) {
+            isMouseDown = false;
+            isPanning = false;
+            hideTooltip();
+        }
+        
+        function onMouseLeave() {
+            hideTooltip();
+        }
+        
+        function onWheel(event) {
+            const delta = event.deltaY * vizParams.zoomSensitivity;
+            camera.position.z = Math.max(20, Math.min(150, camera.position.z + delta));
+            event.preventDefault();
+        }
+        
+        function onMouseClick(event) {
+            // Check for intersection
+            raycaster.setFromCamera(mouse, camera);
+            raycaster.params.Points.threshold = 2;
+            
+            const intersects = raycaster.intersectObject(points);
+            
+            if (intersects.length > 0) {
+                const index = intersects[0].index;
+                selectedPoint = filteredData[index];
+                showInfoPanel(selectedPoint);
+            }
+        }
+        
+        // Tooltip functions
+        function showTooltip(x, y, data) {
+            const tooltip = document.getElementById('tooltip');
+            tooltip.innerHTML = `
+                <div class="space-y-1">
+                    <div class="font-semibold text-white border-b border-gray-700 pb-1 mb-1">
+                        Point Information
+                    </div>
+                    <div class="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+                        <span class="text-gray-400">Unique ID:</span>
+                        <span class="text-gray-200 truncate">${data.unique_id}</span>
+                        
+                        <span class="text-gray-400">FEN:</span>
+                        <span class="text-gray-200 truncate">${data.fen}</span>
+                        
+                        <span class="text-gray-400">ECO:</span>
+                        <span class="text-gray-200">${data.eco}</span>
+                        
+                        <span class="text-gray-400">Name:</span>
+                        <span class="text-gray-200 truncate">${data.name}</span>
+                        
+                        <span class="text-gray-400">Graph Type:</span>
+                        <span class="text-gray-200">${data.graph_type || 'N/A'}</span>
+                        
+                        <span class="text-gray-400">Cluster:</span>
+                        <span class="${data.is_noise ? 'text-gray-500' : 'text-blue-400'} font-medium">
+                            ${data.is_noise ? 'Noise' : `Cluster ${data.cluster_label}`}
+                        </span>
+                        
+                        <span class="text-gray-400">Coordinates:</span>
+                        <span class="text-gray-200 text-xs">
+                            (${data.x.toFixed(3)}, ${data.y.toFixed(3)}, ${data.z.toFixed(3)})
+                        </span>
+                    </div>
+                </div>
+            `;
+            
+            // Position tooltip
+            const tooltipWidth = 300;
+            const tooltipHeight = 200;
+            const padding = 20;
+            
+            let adjustedX = x + 10;
+            let adjustedY = y - 10;
+            
+            if (adjustedX + tooltipWidth > window.innerWidth - padding) {
+                adjustedX = x - tooltipWidth - 10;
+            }
+            
+            if (adjustedY - tooltipHeight < padding) {
+                adjustedY = y + 20;
+            }
+            
+            tooltip.style.left = `${adjustedX}px`;
+            tooltip.style.top = `${adjustedY}px`;
+            tooltip.style.transform = adjustedY > y ? 'translateY(0)' : 'translateY(-100%)';
+            
+            tooltip.classList.remove('hidden');
+        }
+        
+        function hideTooltip() {
+            document.getElementById('tooltip').classList.add('hidden');
+        }
+        
+        // Info panel functions
+        function showInfoPanel(point) {
+            const panel = document.getElementById('info-panel');
+            const content = document.getElementById('info-content');
+            
+            // Create copyable fields
+            const fields = [
+                { label: 'Unique ID', value: point.unique_id },
+                { label: 'FEN', value: point.fen },
+                { label: 'ECO', value: point.eco },
+                { label: 'Name', value: point.name },
+                { label: 'Graph Type', value: point.graph_type || 'N/A' },
+                { label: 'Cluster', value: point.is_noise ? 'Noise' : `Cluster ${point.cluster_label}` },
+                { label: 'X Coordinate', value: point.x.toFixed(6) },
+                { label: 'Y Coordinate', value: point.y.toFixed(6) },
+                { label: 'Z Coordinate', value: point.z.toFixed(6) },
+                { label: 'Is Noise', value: point.is_noise ? 'Yes' : 'No' }
+            ];
+            
+            content.innerHTML = fields.map(field => `
+                <div class="bg-gray-800 rounded p-3">
+                    <div class="flex justify-between items-center mb-1">
+                        <span class="text-xs text-gray-400">${field.label}</span>
+                        <button class="copy-button" onclick="copyToClipboard('${field.value.replace(/'/g, "\\'")}', this)">
+                            Copy
+                        </button>
+                    </div>
+                    <div class="text-sm text-gray-200 break-all">${field.value}</div>
+                </div>
+            `).join('');
+            
+            // Add "Copy All" button
+            const allDataStr = JSON.stringify(point, null, 2);
+            content.innerHTML += `
+                <div class="mt-4 pt-4 border-t border-gray-700">
+                    <button class="copy-button w-full" onclick="copyToClipboard('${allDataStr.replace(/'/g, "\\'")}', this)">
+                        Copy All Data as JSON
+                    </button>
+                </div>
+            `;
+            
+            panel.classList.remove('hidden');
+        }
+        
+        function closeInfoPanel() {
+            document.getElementById('info-panel').classList.add('hidden');
+        }
+        
+        function copyToClipboard(text, button) {
+            navigator.clipboard.writeText(text).then(() => {
+                const originalText = button.textContent;
+                button.textContent = 'Copied!';
+                button.classList.add('copied');
+                
+                setTimeout(() => {
+                    button.textContent = originalText;
+                    button.classList.remove('copied');
+                }, 2000);
+            }).catch(err => {
+                console.error('Failed to copy:', err);
+                alert('Failed to copy to clipboard');
+            });
+        }
+        
+        // Animation loop
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            if (points) {
+                if (vizParams.autoRotation) {
+                    points.rotation.y += vizParams.rotationSpeed;
+                }
+                points.rotation.y += (targetRotationY - points.rotation.y) * 0.05;
+                points.rotation.x += (targetRotationX - points.rotation.x) * 0.05;
+            }
+            
+            // Update stats if visible
+            if (stats && vizParams.showStats) {
+                const memory = performance.memory ? (performance.memory.usedJSHeapSize / 1048576).toFixed(2) : 'N/A';
+                stats.innerHTML = `
+                    Points: ${filteredData.length}<br>
+                    Camera Z: ${camera.position.z.toFixed(1)}<br>
+                    Rotation Y: ${points ? points.rotation.y.toFixed(2) : '0.00'}<br>
+                    Memory: ${memory} MB
+                `;
+            }
+            
+            renderer.render(scene, camera);
+        }
+        
+        // Handle window resize
+        function handleResize() {
+            const container = document.getElementById('three-container');
+            if (!container) return;
+            
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+            
+            camera.aspect = width / height;
+            camera.updateProjectionMatrix();
+            renderer.setSize(width, height);
+            
+            // Update point sizes
+            if (points && points.geometry.attributes.size) {
+                const baseSize = Math.min(width, height) / 600;
+                const pointSize = Math.max(0.8, Math.min(3, baseSize * vizParams.pointSize));
+                const sizes = points.geometry.attributes.size.array;
+                for (let i = 0; i < sizes.length; i++) {
+                    sizes[i] = pointSize;
+                }
+                points.geometry.attributes.size.needsUpdate = true;
+            }
+        }
+        
+        // Make functions available globally
+        window.closeInfoPanel = closeInfoPanel;
+        window.copyToClipboard = copyToClipboard;
+        window.toggleControlsPanel = toggleControlsPanel;
+        window.resetView = resetView;
+        window.exportScreenshot = exportScreenshot;
+        window.exportData = exportData;
+    </script>
+</body>
+</html>
